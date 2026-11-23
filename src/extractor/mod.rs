@@ -351,6 +351,24 @@ pub fn extract_text_with_positions_and_rotations_mem_with_options(
     Ok((items, page_rotations))
 }
 
+/// [`extract_text_with_positions_mem_with_options`] for an encrypted PDF:
+/// decrypts with `password` first. (Sheetminer patch, SHE-138.)
+pub fn extract_text_with_positions_mem_with_password(
+    buffer: &[u8],
+    password: Option<&str>,
+    options: PositionOptions,
+) -> Result<Vec<TextItem>, PdfError> {
+    crate::validate_pdf_bytes(buffer)?;
+    let (doc, _) = crate::load_document_from_mem_with_password(buffer, password)?;
+    let font_cmaps = FontCMaps::from_doc(&doc);
+    let ((mut items, _rects, _lines), _thresholds, _gid_pages, page_rotations, _cmap_coverage) =
+        extract_positioned_text_from_doc_in_page_box(&doc, &font_cmaps, None, options)?;
+    if options.frame == PositionFrame::Display {
+        display_frame::document_items_to_display_frame(&doc, &mut items, &page_rotations);
+    }
+    Ok(items)
+}
+
 /// One page's geometry in the visible-page-box frame, from
 /// [`extract_page_text_items_in_page_box`].
 pub(crate) struct PageBoxExtraction {

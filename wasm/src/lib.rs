@@ -359,6 +359,50 @@ pub fn extract_text(data: &[u8]) -> Result<String, JsValue> {
     )
 }
 
+/// One word-run with its box, for rule-based table readers (Sheetminer patch, SHE-138).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmTextRun {
+    text: String,
+    page: u32,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    rotation: f32,
+    invisible: bool,
+}
+
+/// Text runs with positions in the rendered page's frame (`/Rotate` applied):
+/// PDF points from the page's lower-left corner, `y` up, `y` is the baseline.
+#[wasm_bindgen(js_name = extractTextRuns, skip_typescript)]
+pub fn extract_text_runs(data: &[u8], password: Option<String>) -> Result<JsValue, JsValue> {
+    initialize();
+    let options = pdf_inspector::extractor::PositionOptions::new()
+        .frame(pdf_inspector::extractor::PositionFrame::Display);
+    let items = pdf_inspector::extractor::extract_text_with_positions_mem_with_password(
+        data,
+        password.as_deref(),
+        options,
+    )
+    .map_err(|error| js_error("extract text runs", error))?;
+    let runs: Vec<WasmTextRun> = items
+        .into_iter()
+        .filter(|item| matches!(item.item_type, pdf_inspector::extractor::ItemType::Text))
+        .map(|item| WasmTextRun {
+            invisible: item.render_mode == Some(3),
+            text: item.text,
+            page: item.page,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            rotation: item.rotation,
+        })
+        .collect();
+    serialize(&runs)
+}
+
 /// Return the WebAssembly package version.
 #[wasm_bindgen(skip_typescript)]
 pub fn version() -> String {
